@@ -1,4 +1,11 @@
-/** 自选股记录（后端返回） */
+/** 通用 API 响应结构 */
+export interface ApiResponse<T = unknown> {
+  code: number
+  message: string
+  data: T
+}
+
+/** 自选股记录（对应后端 Stock 实体） */
 export interface StockItem {
   id: number
   stockCode: string
@@ -8,33 +15,33 @@ export interface StockItem {
   updatedAt: string
 }
 
-/** 实时行情数据 */
-export interface QuoteInfo {
-  code: string
-  name: string
+/** 自选股 + 行情（对应后端 StockQuoteVO） */
+export interface StockQuoteVO {
+  id: number
+  stockCode: string
+  stockName: string
   currentPrice: number
-  changePercent: number
-  changeAmount: number
-  open: number
+  todayOpen: number
+  yesterdayClose: number
   high: number
   low: number
   volume: number
-  turnover: number
+  notes: string
 }
 
-/** 自选股 + 行情合并后的展示数据 */
-export interface StockWithQuote extends StockItem {
-  quote?: QuoteInfo
-}
-
-/** 添加自选股请求 */
-export interface AddStockReq {
+/** 搜索结果（对应后端 StockSearchVO） */
+export interface StockSearchVO {
   stockCode: string
   stockName: string
+}
+
+/** 添加自选股请求（对应后端 StockAddRequest） */
+export interface AddStockReq {
+  stockCode: string
   notes?: string
 }
 
-/** 修改备注请求 */
+/** 修改备注请求（对应后端 StockUpdateRequest） */
 export interface UpdateNotesReq {
   notes: string
 }

@@ -3,7 +3,7 @@
     <div class="search-add__input-row">
       <t-input
         v-model="stockCode"
-        placeholder="输入股票代码，如 sh600519、sz000001"
+        placeholder="输入股票代码，如 600519、000001"
         clearable
         @enter="handleSearch"
       >
@@ -20,15 +20,15 @@
     <div v-if="preview" class="search-add__preview">
       <div class="preview-card">
         <div class="preview-card__header">
-          <span class="preview-card__name">{{ preview.name }}</span>
-          <span class="preview-card__code">{{ preview.code }}</span>
+          <span class="preview-card__name">{{ preview.stockName }}</span>
+          <span class="preview-card__code">{{ preview.stockCode }}</span>
         </div>
         <div class="preview-card__body">
           <span :class="priceClass">
             {{ preview.currentPrice.toFixed(2) }}
           </span>
           <span :class="priceClass" style="margin-left: 12px">
-            {{ preview.changePercent >= 0 ? '+' : '' }}{{ preview.changePercent.toFixed(2) }}%
+            {{ changePercent >= 0 ? '+' : '' }}{{ changePercent.toFixed(2) }}%
           </span>
         </div>
         <div class="preview-card__actions">
@@ -51,7 +51,7 @@
 import { ref, computed } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { getQuotes, addStock } from '@/api/stock'
-import type { QuoteInfo } from '@/types'
+import type { StockQuoteVO } from '@/types'
 
 const emit = defineEmits<{
   (e: 'added'): void
@@ -59,14 +59,19 @@ const emit = defineEmits<{
 
 const stockCode = ref('')
 const notes = ref('')
-const preview = ref<QuoteInfo | null>(null)
+const preview = ref<StockQuoteVO | null>(null)
 const searching = ref(false)
 const adding = ref(false)
 
+const changePercent = computed(() => {
+  if (!preview.value || !preview.value.yesterdayClose) return 0
+  return ((preview.value.currentPrice - preview.value.yesterdayClose) / preview.value.yesterdayClose) * 100
+})
+
 const priceClass = computed(() => {
   if (!preview.value) return 'text-flat'
-  if (preview.value.changePercent > 0) return 'text-rise'
-  if (preview.value.changePercent < 0) return 'text-fall'
+  if (changePercent.value > 0) return 'text-rise'
+  if (changePercent.value < 0) return 'text-fall'
   return 'text-flat'
 })
 
@@ -80,9 +85,13 @@ async function handleSearch() {
   searching.value = true
   preview.value = null
   try {
-    const data = await getQuotes([code])
-    if (data && data.length > 0) {
-      preview.value = data[0]
+    const res = await getQuotes([code])
+    if (res.code !== 200) {
+      MessagePlugin.error(res.message || '查询失败')
+      return
+    }
+    if (res.data && res.data.length > 0) {
+      preview.value = res.data[0]
     } else {
       MessagePlugin.warning('未找到该股票信息')
     }
@@ -97,18 +106,21 @@ async function handleAdd() {
   if (!preview.value) return
   adding.value = true
   try {
-    await addStock({
-      stockCode: preview.value.code,
-      stockName: preview.value.name,
+    const res = await addStock({
+      stockCode: preview.value.stockCode,
       notes: notes.value.trim(),
     })
+    if (res.code !== 200) {
+      MessagePlugin.error(res.message || '添加失败')
+      return
+    }
     MessagePlugin.success('添加成功')
     preview.value = null
     stockCode.value = ''
     notes.value = ''
     emit('added')
   } catch {
-    MessagePlugin.error('添加失败，可能已存在')
+    MessagePlugin.error('添加失败，请稍后重试')
   } finally {
     adding.value = false
   }

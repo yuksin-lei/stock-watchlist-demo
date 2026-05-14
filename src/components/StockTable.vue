@@ -25,19 +25,19 @@
 import { ref, onMounted, onUnmounted, h } from 'vue'
 import { MessagePlugin, DialogPlugin, Input as TInput, Button as TButton } from 'tdesign-vue-next'
 import { getStockList, deleteStock, updateNotes } from '@/api/stock'
-import type { StockWithQuote } from '@/types'
+import type { StockQuoteVO } from '@/types'
 import type { PrimaryTableCol } from 'tdesign-vue-next'
 
 defineExpose({ refresh: loadList })
 
-const list = ref<StockWithQuote[]>([])
+const list = ref<StockQuoteVO[]>([])
 const loading = ref(false)
 const editingId = ref<number | null>(null)
 const editingNotes = ref('')
 
 let timer: ReturnType<typeof setInterval> | null = null
 
-const columns: PrimaryTableCol<StockWithQuote>[] = [
+const columns: PrimaryTableCol<StockQuoteVO>[] = [
   {
     colKey: 'stockCode',
     title: '股票代码',
@@ -47,18 +47,16 @@ const columns: PrimaryTableCol<StockWithQuote>[] = [
     colKey: 'stockName',
     title: '名称',
     width: 120,
-    cell: (_h, { row }) => {
-      return row.quote?.name || row.stockName
-    },
   },
   {
     colKey: 'currentPrice',
     title: '现价',
     width: 100,
     cell: (_h, { row }) => {
-      if (!row.quote) return '--'
-      const cls = getColorClass(row.quote.changePercent)
-      return h('span', { class: cls }, row.quote.currentPrice.toFixed(2))
+      if (row.currentPrice == null) return '--'
+      const change = getChangePercent(row)
+      const cls = getColorClass(change)
+      return h('span', { class: cls }, row.currentPrice.toFixed(2))
     },
   },
   {
@@ -66,8 +64,8 @@ const columns: PrimaryTableCol<StockWithQuote>[] = [
     title: '涨跌幅',
     width: 100,
     cell: (_h, { row }) => {
-      if (!row.quote) return '--'
-      const val = row.quote.changePercent
+      if (row.currentPrice == null || row.yesterdayClose == null) return '--'
+      const val = getChangePercent(row)
       const cls = getColorClass(val)
       const text = (val >= 0 ? '+' : '') + val.toFixed(2) + '%'
       return h('span', { class: cls, style: { fontWeight: '600' } }, text)
@@ -119,6 +117,11 @@ const columns: PrimaryTableCol<StockWithQuote>[] = [
   },
 ]
 
+function getChangePercent(row: StockQuoteVO) {
+  if (!row.yesterdayClose) return 0
+  return ((row.currentPrice - row.yesterdayClose) / row.yesterdayClose) * 100
+}
+
 function getColorClass(change: number) {
   if (change > 0) return 'text-rise'
   if (change < 0) return 'text-fall'
@@ -128,8 +131,12 @@ function getColorClass(change: number) {
 async function loadList() {
   loading.value = true
   try {
-    const data = await getStockList()
-    list.value = data || []
+    const res = await getStockList()
+    if (res.code !== 200) {
+      MessagePlugin.error({ content: res.message, placement: 'top' })
+      return
+    }
+    list.value = res.data || []
   } catch {
     MessagePlugin.error('获取自选股列表失败')
   } finally {
@@ -141,7 +148,7 @@ function refresh() {
   loadList()
 }
 
-async function handleSaveNotes(row: StockWithQuote) {
+async function handleSaveNotes(row: StockQuoteVO) {
   try {
     await updateNotes(row.id, { notes: editingNotes.value.trim() })
     row.notes = editingNotes.value.trim()
@@ -152,10 +159,10 @@ async function handleSaveNotes(row: StockWithQuote) {
   }
 }
 
-function handleDelete(row: StockWithQuote) {
+function handleDelete(row: StockQuoteVO) {
   const dialog = DialogPlugin.confirm({
     header: '确认删除',
-    body: `确定要从自选股中移除「${row.quote?.name || row.stockName}（${row.stockCode}）」吗？`,
+    body: `确定要从自选股中移除「${row.stockName}（${row.stockCode}）」吗？`,
     confirmBtn: { theme: 'danger', content: '删除' },
     onConfirm: async () => {
       try {
@@ -172,8 +179,8 @@ function handleDelete(row: StockWithQuote) {
 
 onMounted(() => {
   loadList()
-  // 每 15 秒刷新一次行情
-  timer = setInterval(loadList, 15000)
+  // 每 2分钟 刷新一次行情
+  timer = setInterval(loadList, 120000)
 })
 
 onUnmounted(() => {
